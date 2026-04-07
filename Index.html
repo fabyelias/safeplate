@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Food Finder PRO</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+body {
+  margin:0;
+  font-family:'Segoe UI';
+  background:#f4f6f9;
+}
+
+header {
+  padding:15px;
+  color:white;
+  font-weight:bold;
+  font-size:20px;
+  background: linear-gradient(135deg,#ff7a18,#ff3c3c);
+}
+
+#map {
+  height:250px;
+}
+
+#search {
+  width:90%;
+  margin:10px auto;
+  display:block;
+  padding:12px;
+  border-radius:10px;
+  border:none;
+}
+
+.container {
+  padding:10px;
+}
+
+.card {
+  background:white;
+  border-radius:15px;
+  margin-bottom:15px;
+  overflow:hidden;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+  transition:0.2s;
+}
+
+.card:active { transform:scale(0.97); }
+
+.card img {
+  width:100%;
+  height:140px;
+  object-fit:cover;
+}
+
+.content { padding:10px; }
+
+.title { font-weight:bold; font-size:18px; }
+
+.info { color:#666; font-size:14px; }
+
+.badge {
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:10px;
+  font-size:12px;
+  margin-right:5px;
+}
+
+.open { background:#28a745; color:white; }
+.closed { background:#dc3545; color:white; }
+.star { background:#ffc107; }
+
+.fav {
+  float:right;
+  cursor:pointer;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>🍔 Food Finder PRO</header>
+
+<div id="map"></div>
+
+<input id="search" placeholder="Buscar cerca tuyo...">
+
+<div class="container" id="results"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+let userLat = -31.4;
+let userLng = -64.18;
+
+// 📍 GPS real
+navigator.geolocation.getCurrentPosition(pos=>{
+  userLat = pos.coords.latitude;
+  userLng = pos.coords.longitude;
+  initMap();
+  loadPlaces();
+});
+
+// 🗺️ mapa
+let map;
+function initMap(){
+  map = L.map('map').setView([userLat, userLng], 15);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OpenStreetMap'
+  }).addTo(map);
+
+  L.marker([userLat,userLng]).addTo(map)
+    .bindPopup("📍 Estás acá")
+    .openPopup();
+}
+
+// 🧠 fake data (reemplazás por tu API)
+function loadPlaces(){
+  const places = [
+    {name:"Café Central", lat:userLat+0.002, lng:userLng+0.001, type:"Café"},
+    {name:"Green Life", lat:userLat-0.002, lng:userLng+0.002, type:"Vegano"},
+    {name:"Sin Gluten House", lat:userLat+0.001, lng:userLng-0.002, type:"Sin TACC"}
+  ];
+
+  render(places);
+}
+
+// 📏 distancia
+function calcDist(lat,lng){
+  return Math.round(
+    Math.sqrt(
+      Math.pow(lat-userLat,2)+Math.pow(lng-userLng,2)
+    )*111000
+  );
+}
+
+// 💾 favoritos
+function toggleFav(name){
+  let favs = JSON.parse(localStorage.getItem("favs")||"[]");
+  if(favs.includes(name)){
+    favs = favs.filter(f=>f!==name);
+  } else {
+    favs.push(name);
+  }
+  localStorage.setItem("favs", JSON.stringify(favs));
+}
+
+// ⭐ rating random
+function getStars(){
+  return (Math.random()*2+3).toFixed(1);
+}
+
+// 🔥 render
+function render(list){
+  const container = document.getElementById("results");
+  container.innerHTML = "";
+
+  list.sort((a,b)=>calcDist(a.lat,a.lng)-calcDist(b.lat,b.lng));
+
+  list.forEach(p=>{
+
+    const open = Math.random() > 0.3;
+    const dist = calcDist(p.lat,p.lng);
+    const stars = getStars();
+
+    const card = document.createElement("div");
+    card.className = "card";
+
+    card.innerHTML = `
+      <img src="https://picsum.photos/400/200?random=${Math.random()}">
+      <div class="content">
+        <div class="title">
+          ${p.name}
+          <span class="fav">❤️</span>
+        </div>
+        <div class="info">📍 ${dist} m</div>
+
+        <div>
+          <span class="badge ${open?'open':'closed'}">
+            ${open?'Abierto':'Cerrado'}
+          </span>
+          <span class="badge star">⭐ ${stars}</span>
+        </div>
+      </div>
+    `;
+
+    card.onclick = ()=>{
+      if(navigator.vibrate) navigator.vibrate(10);
+
+      map.setView([p.lat,p.lng],17);
+      L.marker([p.lat,p.lng]).addTo(map)
+        .bindPopup(p.name)
+        .openPopup();
+    };
+
+    card.querySelector(".fav").onclick = (e)=>{
+      e.stopPropagation();
+      toggleFav(p.name);
+      alert("Guardado en favoritos");
+    };
+
+    document.getElementById("results").appendChild(card);
+  });
+}
+
+// 🔍 búsqueda
+document.getElementById("search").addEventListener("input", e=>{
+  const val = e.target.value.toLowerCase();
+  loadPlaces();
+});
+
+</script>
+
+</body>
+</html>
