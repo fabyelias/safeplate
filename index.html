@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Food Finder PRO</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+body { margin:0; font-family:Arial; background:#f5f5f5; }
+
+header {
+  padding:15px;
+  background:linear-gradient(135deg,#ff3c3c,#ff7a18);
+  color:white;
+  font-weight:bold;
+}
+
+#map { height:220px; }
+
+.container { padding:10px; }
+
+.card {
+  background:white;
+  margin-bottom:12px;
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 4px 10px rgba(0,0,0,0.1);
+}
+
+.card-content { padding:10px; }
+
+button {
+  margin-top:6px;
+  width:100%;
+  padding:10px;
+  border:none;
+  border-radius:8px;
+  color:white;
+}
+
+.go-btn { background:#28a745; }
+.fav-btn { background:#ffc107; color:black; }
+.review-btn { background:#007bff; }
+
+</style>
+</head>
+
+<body>
+
+<header>🍔 Food Finder PRO (Gratis)</header>
+
+<div id="map"></div>
+<div id="results" class="container"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+let map, userLat, userLng;
+let lugares = [];
+let markers = [];
+
+navigator.geolocation.getCurrentPosition(pos=>{
+  userLat = pos.coords.latitude;
+  userLng = pos.coords.longitude;
+  iniciar();
+}, ()=>{
+  userLat = -34.6;
+  userLng = -58.4;
+  iniciar();
+});
+
+function iniciar(){
+
+  map = L.map('map').setView([userLat, userLng], 14);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+  L.marker([userLat,userLng]).addTo(map).bindPopup("Estás acá");
+
+  cargar();
+}
+
+function distancia(lat,lng){
+  const dx = lat-userLat;
+  const dy = lng-userLng;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+async function cargar(){
+
+  const query = `
+  [out:json];
+  node["amenity"~"restaurant|cafe|fast_food"]
+  (around:10000,${userLat},${userLng});
+  out;
+  `;
+
+  const res = await fetch("https://overpass-api.de/api/interpreter",{
+    method:"POST",
+    body:query
+  });
+
+  const data = await res.json();
+
+  lugares = data.elements.map(l=>({
+    id: l.id,
+    name: l.tags.name || "Sin nombre",
+    lat: l.lat,
+    lng: l.lon
+  }));
+
+  render();
+}
+
+// favoritos
+function getFav(){ return JSON.parse(localStorage.getItem("fav")||"[]"); }
+
+function toggleFav(id){
+  let f = getFav();
+  f.includes(id) ? f = f.filter(x=>x!==id) : f.push(id);
+  localStorage.setItem("fav", JSON.stringify(f));
+}
+
+// reviews
+function getRev(){ return JSON.parse(localStorage.getItem("rev")||"{}"); }
+
+function addRev(id,t){
+  let r = getRev();
+  if(!r[id]) r[id]=[];
+  r[id].push(t);
+  localStorage.setItem("rev", JSON.stringify(r));
+}
+
+function render(){
+
+  const cont = document.getElementById("results");
+  cont.innerHTML = "";
+
+  markers.forEach(m=>map.removeLayer(m));
+  markers = [];
+
+  const fav = getFav();
+  const rev = getRev();
+
+  lugares.sort((a,b)=>distancia(a.lat,a.lng)-distancia(b.lat,b.lng));
+
+  lugares.forEach(l=>{
+
+    const m = L.marker([l.lat,l.lng]).addTo(map);
+    markers.push(m);
+
+    const reviews = (rev[l.id]||[]).map(r=>`<div>⭐ ${r}</div>`).join("");
+
+    const card = document.createElement("div");
+    card.className="card";
+
+    card.innerHTML = `
+      <div class="card-content">
+        <b>${l.name}</b>
+        <button class="go-btn">🧭 Cómo llegar</button>
+        <button class="fav-btn">${fav.includes(l.id)?"★ Guardado":"☆ Guardar"}</button>
+        <button class="review-btn">✍️ Review</button>
+        ${reviews}
+      </div>
+    `;
+
+    card.querySelector(".go-btn").onclick=()=>{
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${l.lat},${l.lng}`);
+    };
+
+    card.querySelector(".fav-btn").onclick=()=>{
+      toggleFav(l.id);
+      render();
+    };
+
+    card.querySelector(".review-btn").onclick=()=>{
+      const t = prompt("Tu opinión:");
+      if(t){ addRev(l.id,t); render(); }
+    };
+
+    cont.appendChild(card);
+  });
+}
+
+</script>
+
+</body>
+</html>
