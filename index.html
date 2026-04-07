@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Food Finder PRO</title>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=TU_API_KEY&libraries=places"></script>
+
+<style>
+body { margin:0; font-family:Arial; background:#f5f5f5; }
+
+header {
+  padding:15px;
+  background:linear-gradient(135deg,#ff3c3c,#ff7a18);
+  color:white;
+  font-weight:bold;
+}
+
+#map { height:220px; }
+
+.filters {
+  display:flex;
+  overflow-x:auto;
+  gap:10px;
+  padding:10px;
+}
+
+.filter {
+  padding:8px 14px;
+  background:white;
+  border-radius:20px;
+  cursor:pointer;
+}
+
+.filter.active {
+  background:#ff3c3c;
+  color:white;
+}
+
+.container { padding:10px; }
+
+.card {
+  background:white;
+  margin-bottom:12px;
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 4px 10px rgba(0,0,0,0.1);
+}
+
+.card img {
+  width:100%;
+  height:140px;
+  object-fit:cover;
+}
+
+.card-content { padding:10px; }
+
+.badge {
+  padding:4px 8px;
+  background:#eee;
+  border-radius:10px;
+  font-size:12px;
+}
+
+button {
+  margin-top:6px;
+  width:100%;
+  padding:10px;
+  border:none;
+  border-radius:8px;
+  color:white;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.go-btn { background:#28a745; }
+.fav-btn { background:#ffc107; color:black; }
+.review-btn { background:#007bff; }
+
+.review-box {
+  margin-top:8px;
+  font-size:13px;
+}
+</style>
+</head>
+
+<body>
+
+<header>🍔 Food Finder PRO</header>
+
+<div id="map"></div>
+
+<div class="filters">
+  <div class="filter active" data-text="">Todos</div>
+  <div class="filter" data-text="restaurant">🍽️</div>
+  <div class="filter" data-text="cafe">☕</div>
+  <div class="filter" data-text="vegan">🥗</div>
+  <div class="filter" data-text="gluten free">🚫🌾</div>
+</div>
+
+<div id="results" class="container"></div>
+
+<script>
+
+let map, service, userLocation;
+let lugares = [];
+let markers = [];
+let filtroTexto = "";
+
+// 📍 ubicación
+navigator.geolocation.getCurrentPosition(pos=>{
+  userLocation = {
+    lat: pos.coords.latitude,
+    lng: pos.coords.longitude
+  };
+  iniciarMapa();
+}, ()=>{
+  userLocation = {lat:-34.6, lng:-58.4};
+  iniciarMapa();
+});
+
+function iniciarMapa(){
+  map = new google.maps.Map(document.getElementById("map"), {
+    center: userLocation,
+    zoom: 14
+  });
+
+  new google.maps.Marker({
+    position:userLocation,
+    map,
+    title:"Estás acá"
+  });
+
+  service = new google.maps.places.PlacesService(map);
+  buscarLugares();
+}
+
+// 🔍 búsqueda
+function buscarLugares(){
+
+  const request = {
+    location: userLocation,
+    radius: 10000,
+    keyword: filtroTexto || "restaurant"
+  };
+
+  service.nearbySearch(request, (results, status)=>{
+    if(status === google.maps.places.PlacesServiceStatus.OK){
+
+      lugares = results.map(l=>({
+        id: l.place_id,
+        name: l.name,
+        lat: l.geometry.location.lat(),
+        lng: l.geometry.location.lng(),
+        rating: l.rating || 0,
+        address: l.vicinity || "",
+        photo: l.photos ? l.photos[0].getUrl() : "",
+      }));
+
+      render(lugares);
+    }
+  });
+}
+
+// 📏 distancia
+function distancia(lat,lng){
+  const dx = lat - userLocation.lat;
+  const dy = lng - userLocation.lng;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+// 💾 FAVORITOS
+function getFavoritos(){
+  return JSON.parse(localStorage.getItem("favoritos") || "[]");
+}
+
+function toggleFavorito(id){
+  let favs = getFavoritos();
+  if(favs.includes(id)){
+    favs = favs.filter(f=>f!==id);
+  } else {
+    favs.push(id);
+  }
+  localStorage.setItem("favoritos", JSON.stringify(favs));
+}
+
+// ⭐ REVIEWS
+function getReviews(){
+  return JSON.parse(localStorage.getItem("reviews") || "{}");
+}
+
+function agregarReview(id, texto){
+  const reviews = getReviews();
+  if(!reviews[id]) reviews[id] = [];
+  reviews[id].push(texto);
+  localStorage.setItem("reviews", JSON.stringify(reviews));
+}
+
+// 🎯 render
+function render(lista){
+
+  const cont = document.getElementById("results");
+  cont.innerHTML = "";
+
+  markers.forEach(m=>m.setMap(null));
+  markers = [];
+
+  lista.sort((a,b)=>distancia(a.lat,a.lng)-distancia(b.lat,b.lng));
+
+  const favoritos = getFavoritos();
+  const reviews = getReviews();
+
+  lista.forEach(l=>{
+
+    const marker = new google.maps.Marker({
+      position:{lat:l.lat, lng:l.lng},
+      map
+    });
+
+    markers.push(marker);
+
+    const card = document.createElement("div");
+    card.className = "card";
+
+    const fav = favoritos.includes(l.id);
+
+    const reviewList = (reviews[l.id] || []).map(r=>`<div>⭐ ${r}</div>`).join("");
+
+    card.innerHTML = `
+      ${l.photo ? `<img src="${l.photo}">` : ""}
+      <div class="card-content">
+        <b>${l.name}</b><br>
+        ⭐ ${l.rating}<br>
+        📍 ${l.address}
+
+        <button class="go-btn">🧭 Cómo llegar</button>
+        <button class="fav-btn">${fav ? "★ Guardado" : "☆ Guardar"}</button>
+        <button class="review-btn">✍️ Agregar review</button>
+
+        <div class="review-box">${reviewList}</div>
+      </div>
+    `;
+
+    // eventos
+    card.querySelector(".go-btn").onclick = (e)=>{
+      e.stopPropagation();
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${l.lat},${l.lng}`);
+    };
+
+    card.querySelector(".fav-btn").onclick = (e)=>{
+      e.stopPropagation();
+      toggleFavorito(l.id);
+      render(lista);
+    };
+
+    card.querySelector(".review-btn").onclick = (e)=>{
+      e.stopPropagation();
+      const texto = prompt("Escribí tu opinión:");
+      if(texto){
+        agregarReview(l.id, texto);
+        render(lista);
+      }
+    };
+
+    cont.appendChild(card);
+  });
+}
+
+// filtros
+document.querySelectorAll(".filter").forEach(f=>{
+  f.onclick = ()=>{
+    document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));
+    f.classList.add("active");
+
+    filtroTexto = f.dataset.text;
+    buscarLugares();
+  };
+});
+
+</script>
+
+</body>
+</html>
