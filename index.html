@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Food Finder PRO</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+body { margin:0; font-family:'Segoe UI'; background:#f4f6f9; }
+
+header {
+  padding:15px;
+  color:white;
+  font-size:20px;
+  font-weight:bold;
+  background: linear-gradient(135deg,#ff7a18,#ff3c3c);
+}
+
+#map { height:200px; }
+
+#search {
+  width:90%;
+  margin:10px auto;
+  display:block;
+  padding:12px;
+  border-radius:10px;
+  border:none;
+}
+
+.filters {
+  display:flex;
+  overflow-x:auto;
+  padding:10px;
+  gap:10px;
+}
+
+.filter {
+  padding:8px 14px;
+  border-radius:20px;
+  background:#eee;
+  cursor:pointer;
+  white-space:nowrap;
+}
+
+.filter.active {
+  background:linear-gradient(135deg,#ff7a18,#ff3c3c);
+  color:white;
+}
+
+.container { padding:10px; }
+
+.card {
+  background:white;
+  border-radius:15px;
+  margin-bottom:15px;
+  overflow:hidden;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+}
+
+.card img {
+  width:100%;
+  height:140px;
+  object-fit:cover;
+}
+
+.content { padding:10px; }
+
+.title { font-weight:bold; font-size:18px; }
+
+.badge {
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:10px;
+  font-size:12px;
+  margin-right:5px;
+  background:#007bff;
+  color:white;
+}
+
+button {
+  width:100%;
+  margin-top:8px;
+  padding:10px;
+  border:none;
+  border-radius:10px;
+  color:white;
+  font-weight:bold;
+}
+
+.go-btn { background:#28a745; }
+.fav-btn { background:#ffc107; color:black; }
+.review-btn { background:#007bff; }
+
+</style>
+</head>
+
+<body>
+
+<header>🍔 Food Finder PRO</header>
+
+<div id="map"></div>
+
+<input id="search" placeholder="Buscar comida, tipo o país...">
+
+<div class="filters" id="filters"></div>
+
+<div class="container" id="results"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+let userLat, userLng, map, markersLayer;
+
+let lugares = [];
+let lugaresOriginal = [];
+
+let filtro = "all";
+
+// 📸 IMAGEN SEGURA (NUNCA FALLA)
+function getImage(tipo){
+  const imgs = {
+    restaurant:"https://images.unsplash.com/photo-1555396273-367ea4eb4db5",
+    cafe:"https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb",
+    fast_food:"https://images.unsplash.com/photo-1550547660-d9450f859349"
+  };
+  return imgs[tipo] || imgs.restaurant;
+}
+
+// 📍 ubicación
+navigator.geolocation.getCurrentPosition(pos=>{
+  userLat = pos.coords.latitude;
+  userLng = pos.coords.longitude;
+  iniciar();
+}, ()=>{
+  userLat = -34.6;
+  userLng = -58.4;
+  iniciar();
+});
+
+function iniciar(){
+
+  map = L.map('map').setView([userLat, userLng], 14);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+  markersLayer = L.layerGroup().addTo(map);
+
+  cargar();
+  crearFiltros();
+}
+
+// 🎯 FILTROS INTELIGENTES
+const filtrosLista = [
+  {id:"all", nombre:"Todos"},
+  {id:"restaurant", nombre:"🍽️ Restaurante"},
+  {id:"cafe", nombre:"☕ Café"},
+  {id:"fast_food", nombre:"🍔 Fast Food"},
+  {id:"vegan", nombre:"🥦 Vegano"},
+  {id:"gluten_free", nombre:"🚫 Sin TACC"},
+  {id:"kosher", nombre:"✡️ Kosher"},
+  {id:"italian", nombre:"🇮🇹 Italiano"},
+  {id:"chinese", nombre:"🇨🇳 Chino"},
+  {id:"japanese", nombre:"🇯🇵 Japonés"},
+  {id:"mexican", nombre:"🇲🇽 Mexicano"},
+  {id:"argentinian", nombre:"🇦🇷 Argentino"}
+];
+
+function crearFiltros(){
+  const cont = document.getElementById("filters");
+
+  filtrosLista.forEach(f=>{
+    const div = document.createElement("div");
+    div.className = "filter";
+    div.innerText = f.nombre;
+
+    div.onclick = ()=>{
+      document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));
+      div.classList.add("active");
+      filtro = f.id;
+      render();
+    };
+
+    cont.appendChild(div);
+  });
+
+  cont.firstChild.classList.add("active");
+}
+
+// 📥 DATOS
+async function cargar(){
+
+  const query = `
+  [out:json];
+  node["amenity"~"restaurant|cafe|fast_food"]
+  (around:10000,${userLat},${userLng});
+  out;
+  `;
+
+  const res = await fetch("https://overpass-api.de/api/interpreter",{
+    method:"POST",
+    body:query
+  });
+
+  const data = await res.json();
+
+  lugares = data.elements.map(l=>({
+    id:l.id,
+    name:l.tags.name || "Local gastronómico",
+    lat:l.lat,
+    lng:l.lon,
+    tipo:l.tags.amenity,
+    tags:l.tags
+  }));
+
+  lugaresOriginal = [...lugares];
+
+  render();
+}
+
+// 🧠 FILTRO INTELIGENTE REAL
+function cumpleFiltro(l){
+
+  if(filtro==="all") return true;
+
+  if(l.tipo===filtro) return true;
+
+  const texto = (l.name + JSON.stringify(l.tags)).toLowerCase();
+
+  return texto.includes(filtro);
+}
+
+// render
+function render(){
+
+  const cont = document.getElementById("results");
+  cont.innerHTML="";
+  markersLayer.clearLayers();
+
+  lugaresOriginal.forEach(l=>{
+
+    if(!cumpleFiltro(l)) return;
+
+    L.marker([l.lat,l.lng]).addTo(markersLayer);
+
+    const card = document.createElement("div");
+    card.className="card";
+
+    card.innerHTML=`
+      <img src="${getImage(l.tipo)}">
+      <div class="content">
+        <div class="title">${l.name}</div>
+
+        <span class="badge">${l.tipo}</span>
+
+        <button class="go-btn">🧭 Cómo llegar</button>
+        <button class="fav-btn">☆ Guardar</button>
+        <button class="review-btn">✍️ Review</button>
+      </div>
+    `;
+
+    card.querySelector(".go-btn").onclick=()=>{
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${l.lat},${l.lng}`);
+    };
+
+    cont.appendChild(card);
+
+  });
+}
+
+// 🔎 búsqueda inteligente
+document.getElementById("search").oninput = e=>{
+  const t = e.target.value.toLowerCase();
+
+  lugaresOriginal = lugares.filter(l=>
+    l.name.toLowerCase().includes(t) ||
+    JSON.stringify(l.tags).toLowerCase().includes(t)
+  );
+
+  render();
+};
+
+</script>
+
+</body>
+</html>
