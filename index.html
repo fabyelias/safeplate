@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Limpio y Rico</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --bg:#0a0a0a;
+  --bg2:#111111;
+  --bg3:#1a1a1a;
+  --bg4:#222222;
+  --border:#2a2a2a;
+  --border2:#333;
+  --gold:#c9a84c;
+  --gold2:#e8c96a;
+  --gold3:#f5e0a0;
+  --gold-dim:rgba(201,168,76,0.15);
+  --gold-glow:rgba(201,168,76,0.08);
+  --text:#f0ece4;
+  --text2:#b8b0a0;
+  --text3:#706860;
+  --green:#4a9c6d;
+  --green-dim:rgba(74,156,109,0.15);
+  --blue:#4a7fb5;
+  --blue-dim:rgba(74,127,181,0.15);
+  --purple:#9b6fd4;
+  --purple-dim:rgba(155,111,212,0.15);
+  --red:#c0392b;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'DM Sans',-apple-system,sans-serif;}
+
+/* ── SCREENS ── */
+.screen{position:fixed;inset:0;background:var(–bg);display:none;flex-direction:column;}
+.screen.visible{display:flex;}
+#sPerm{z-index:300;align-items:center;justify-content:center;padding:32px 24px;gap:20px;text-align:center;overflow-y:auto;}
+#sLoad{z-index:290;align-items:center;justify-content:center;gap:16px;}
+#sApp{z-index:100;}
+#sDetalle{z-index:200;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);display:flex;}
+#sDetalle.open{transform:translateX(0);}
+
+/* ── TOPBAR ── */
+.topbar{
+flex-shrink:0;
+background:var(–bg);
+border-bottom:1px solid var(–border);
+display:flex;align-items:center;gap:12px;
+padding:12px 16px;
+padding-top:max(12px,env(safe-area-inset-top));
+}
+.logo{
+display:flex;flex-direction:column;align-items:flex-start;
+white-space:nowrap;flex-shrink:0;
+}
+.logo-main{
+font-family:‘Cormorant Garamond’,serif;
+font-size:1.3rem;font-weight:700;
+color:var(–text);letter-spacing:.5px;line-height:1;
+}
+.logo-main em{color:var(–gold);font-style:italic;}
+.logo-sub{font-size:.58rem;color:var(–text3);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+
+.searchbox{
+flex:1;min-width:0;
+display:flex;align-items:center;gap:8px;
+background:var(–bg3);
+border:1px solid var(–border2);
+border-radius:50px;padding:9px 14px;
+transition:border-color .2s;
+}
+.searchbox:focus-within{border-color:var(–gold);}
+.searchbox input{flex:1;min-width:0;background:none;border:none;outline:none;color:var(–text);font-size:.84rem;font-family:‘DM Sans’,sans-serif;}
+.searchbox input::placeholder{color:var(–text3);}
+.search-ic{color:var(–text3);font-size:.9rem;flex-shrink:0;}
+
+/* ── MINI MAPA ── */
+.map-strip{
+flex-shrink:0;height:180px;position:relative;
+border-bottom:1px solid var(–border);
+overflow:hidden;
+}
+#map{width:100%;height:100%;z-index:1;background:var(–bg2);}
+
+/* Overlay gradient en el mapa */
+.map-strip::after{
+content:’’;
+position:absolute;bottom:0;left:0;right:0;height:50px;
+background:linear-gradient(to top,var(–bg),transparent);
+z-index:10;pointer-events:none;
+}
+
+/* Botón expandir mapa */
+.map-expand-btn{
+position:absolute;top:10px;right:10px;z-index:20;
+background:var(–bg3);border:1px solid var(–border2);
+color:var(–text2);font-size:.7rem;font-weight:600;
+border-radius:50px;padding:5px 11px;cursor:pointer;
+letter-spacing:.5px;transition:all .15s;
+touch-action:manipulation;
+}
+.map-expand-btn:active{background:var(–bg4);}
+
+/* Mapa expandido */
+.map-strip.expanded{height:55vh;}
+
+/* ── FILTROS ── */
+.filter-wrap{flex-shrink:0;background:var(–bg);border-bottom:1px solid var(–border);}
+.filter-row{display:flex;gap:6px;padding:8px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;align-items:center;}
+.filter-row::-webkit-scrollbar{display:none;}
+.filter-row+.filter-row{padding-top:0;padding-bottom:9px;}
+.filter-sec{font-size:.58rem;font-weight:600;color:var(–text3);text-transform:uppercase;letter-spacing:1.2px;flex-shrink:0;padding-right:4px;}
+
+.chip{
+flex-shrink:0;
+display:flex;align-items:center;gap:5px;
+padding:6px 13px;border-radius:50px;
+border:1px solid var(–border2);
+background:var(–bg3);
+color:var(–text3);font-size:.72rem;font-weight:500;
+white-space:nowrap;cursor:pointer;
+touch-action:manipulation;-webkit-user-select:none;user-select:none;
+transition:all .18s;
+}
+.chip.on{background:var(–gold-dim);border-color:var(–gold);color:var(–gold);}
+.chip.on-green{background:var(–green-dim);border-color:var(–green);color:var(–green);}
+.chip.on-blue{background:var(–blue-dim);border-color:var(–blue);color:var(–blue);}
+.chip.on-purple{background:var(–purple-dim);border-color:var(–purple);color:var(–purple);}
+
+/* Banner filtros activos */
+.af-bar{flex-shrink:0;display:none;align-items:center;justify-content:space-between;padding:5px 14px;background:var(–gold-dim);border-bottom:1px solid rgba(201,168,76,.2);}
+.af-bar.show{display:flex;}
+.af-text{font-size:.71rem;color:var(–gold);font-weight:500;}
+.af-clear{font-size:.69rem;color:var(–text3);cursor:pointer;text-decoration:underline;touch-action:manipulation;margin-left:10px;flex-shrink:0;}
+
+/* Barra radio */
+.radio-bar{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:5px 14px;background:var(–bg2);border-bottom:1px solid var(–border);gap:8px;}
+.radio-info{font-size:.7rem;color:var(–text3);white-space:nowrap;}
+.radio-info b{color:var(–text2);}
+.radio-btns{display:flex;gap:4px;}
+.rbtn{font-size:.66rem;font-weight:600;padding:3px 9px;border-radius:50px;border:1px solid var(–border2);background:var(–bg3);color:var(–text3);cursor:pointer;touch-action:manipulation;transition:all .15s;white-space:nowrap;}
+.rbtn.active{background:var(–gold-dim);border-color:var(–gold);color:var(–gold);}
+
+/* ── LISTA PRINCIPAL ── */
+.list-area{flex:1;overflow-y:scroll;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;padding:10px 14px 20px;display:flex;flex-direction:column;gap:10px;padding-bottom:max(20px,env(safe-area-inset-bottom));}
+
+/* ── CARD ── */
+.card{
+flex-shrink:0;
+background:var(–bg2);
+border:1px solid var(–border2);
+border-radius:16px;
+cursor:pointer;
+overflow:hidden;
+transition:transform .2s, box-shadow .2s, border-color .2s;
+/* Animacion de entrada */
+opacity:0;
+transform:translateY(16px);
+animation:slideUp .3s forwards;
+}
+@keyframes slideUp{to{opacity:1;transform:translateY(0);}}
+
+.card:active{transform:scale(.98);}
+.card.sel{border-color:var(–gold);box-shadow:0 0 0 1px var(–gold),0 8px 32px rgba(201,168,76,.15);}
+
+/* Barra de color lateral */
+.card-bar{height:3px;background:var(–border2);}
+.card.c-tacc  .card-bar{background:linear-gradient(90deg,var(–gold),var(–gold2));}
+.card.c-vegan .card-bar{background:linear-gradient(90deg,var(–green),#6dba8a);}
+.card.c-ambos .card-bar{background:linear-gradient(90deg,var(–gold),var(–green));}
+.card.c-diet  .card-bar{background:var(–green);}
+.card.c-kosher.card-bar{background:var(–blue);}
+
+.card-body{padding:14px 15px 13px;}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;}
+.card-name{
+font-family:‘Cormorant Garamond’,serif;
+font-size:1.05rem;font-weight:600;
+color:var(–text);line-height:1.2;
+flex:1;min-width:0;
+}
+.card-dist{
+font-size:.68rem;font-weight:600;
+padding:3px 9px;border-radius:50px;
+margin-left:10px;white-space:nowrap;flex-shrink:0;
+background:var(–bg3);color:var(–text3);border:1px solid var(–border2);
+}
+.card-dist.d0{background:var(–green-dim);color:var(–green);border-color:rgba(74,156,109,.3);}
+.card-dist.d1{background:var(–gold-dim);color:var(–gold);border-color:rgba(201,168,76,.3);}
+
+.card-meta{display:flex;align-items:center;gap:6px;margin-bottom:9px;}
+.card-tipo{font-size:.71rem;color:var(–text3);}
+.meta-sep{width:3px;height:3px;border-radius:50%;background:var(–border2);}
+
+.card-tags{display:flex;flex-wrap:wrap;gap:5px;}
+.tag{font-size:.62rem;font-weight:600;padding:3px 9px;border-radius:50px;}
+.tag-tacc  {background:var(–gold-dim);  color:var(–gold);   border:1px solid rgba(201,168,76,.25);}
+.tag-vegan {background:var(–green-dim); color:var(–green);  border:1px solid rgba(74,156,109,.25);}
+.tag-veg   {background:var(–green-dim); color:var(–green);  border:1px solid rgba(74,156,109,.2);}
+.tag-diet  {background:var(–green-dim); color:var(–green);  border:1px solid rgba(74,156,109,.25);}
+.tag-kosher{background:var(–blue-dim);  color:var(–blue);   border:1px solid rgba(74,127,181,.25);}
+.tag-exp   {background:var(–purple-dim);color:var(–purple); border:1px solid rgba(155,111,212,.25);}
+.tag-cuisine{background:rgba(255,255,255,.05);color:var(–text2);border:1px solid var(–border2);}
+.tag-nd    {background:transparent;color:var(–text3);border:1px solid var(–border);}
+.tag-kw    {background:rgba(201,168,76,.08);color:var(–text3);border:1px solid rgba(201,168,76,.15);font-style:italic;}
+
+/* ── DETALLE ── */
+.det-nav{
+flex-shrink:0;
+display:flex;align-items:center;gap:12px;
+padding:12px 16px;
+padding-top:max(12px,env(safe-area-inset-top));
+border-bottom:1px solid var(–border);
+background:var(–bg);
+}
+.back-btn{
+width:36px;height:36px;border-radius:50%;
+background:var(–bg3);border:1px solid var(–border2);
+color:var(–text2);display:flex;align-items:center;justify-content:center;
+font-size:1rem;cursor:pointer;touch-action:manipulation;flex-shrink:0;
+transition:all .15s;
+}
+.back-btn:active{background:var(–bg4);}
+.det-nav-title{font-family:‘Cormorant Garamond’,serif;font-size:1rem;font-weight:600;color:var(–text2);}
+
+.det-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+
+/* Hero detalle */
+.det-hero{
+padding:24px 18px 18px;
+background:var(–bg2);
+border-bottom:1px solid var(–border);
+position:relative;
+}
+/* Línea dorada arriba del hero */
+.det-hero::before{
+content:’’;position:absolute;top:0;left:0;right:0;height:2px;
+background:linear-gradient(90deg,var(–gold),var(–gold2),transparent);
+}
+.det-tipo-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.det-tipo-ic{
+width:44px;height:44px;flex-shrink:0;
+background:var(–bg3);border:1px solid var(–border2);
+border-radius:12px;display:flex;align-items:center;justify-content:center;
+font-size:1.3rem;
+}
+.det-tipo-label{font-size:.7rem;color:var(–text3);font-weight:500;}
+.det-dist-badge{
+margin-left:auto;font-size:.7rem;font-weight:700;
+background:var(–gold-dim);color:var(–gold);
+border:1px solid rgba(201,168,76,.3);
+padding:4px 11px;border-radius:50px;
+}
+.det-name{
+font-family:‘Cormorant Garamond’,serif;
+font-size:1.6rem;font-weight:700;
+color:var(–text);line-height:1.15;
+margin-bottom:12px;
+}
+.det-tags{display:flex;gap:6px;flex-wrap:wrap;}
+
+/* Bloque experiencias */
+.exp-block{
+margin:16px 16px 0;
+background:var(–purple-dim);
+border:1px solid rgba(155,111,212,.2);
+border-radius:14px;padding:14px;
+}
+.exp-block-title{
+font-size:.62rem;font-weight:700;text-transform:uppercase;
+letter-spacing:1.2px;color:var(–purple);margin-bottom:11px;
+}
+.exp-item{display:flex;align-items:flex-start;gap:10px;margin-bottom:9px;}
+.exp-item:last-child{margin-bottom:0;}
+.exp-ic{width:30px;height:30px;background:var(–bg2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;}
+
+/* Secciones info */
+.det-section{padding:14px 18px;border-bottom:1px solid var(–border);}
+.det-section:last-child{border-bottom:none;}
+.det-sec-title{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(–text3);margin-bottom:12px;}
+.info-row{display:flex;align-items:flex-start;gap:11px;margin-bottom:10px;}
+.info-row:last-child{margin-bottom:0;}
+.info-ic{
+width:32px;height:32px;flex-shrink:0;
+background:var(–bg3);border:1px solid var(–border2);
+border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.85rem;
+}
+.info-label{font-size:.64rem;color:var(–text3);font-weight:500;margin-bottom:2px;}
+.info-value{font-size:.83rem;color:var(–text2);line-height:1.45;word-break:break-word;}
+.osm-note{
+font-size:.72rem;color:var(–text3);
+background:var(–gold-glow);
+border:1px solid rgba(201,168,76,.15);
+border-radius:10px;padding:10px 12px;line-height:1.55;
+}
+
+/* Footer detalle */
+.det-foot{
+flex-shrink:0;display:flex;gap:8px;
+padding:12px 16px;
+padding-bottom:max(12px,env(safe-area-inset-bottom));
+border-top:1px solid var(–border);
+background:var(–bg);
+}
+.btn-p{
+flex:2;padding:14px;
+background:var(–gold);color:#000;
+border:none;border-radius:50px;
+font-family:‘DM Sans’,sans-serif;font-weight:700;font-size:.88rem;
+cursor:pointer;touch-action:manipulation;
+transition:all .15s;
+display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.btn-p:active{background:var(–gold2);transform:scale(.97);}
+.btn-s{
+flex:1;padding:14px;
+background:var(–bg3);color:var(–text2);
+border:1px solid var(–border2);border-radius:50px;
+font-family:‘DM Sans’,sans-serif;font-weight:500;font-size:.84rem;
+cursor:pointer;touch-action:manipulation;
+transition:all .15s;
+}
+.btn-s:active{background:var(–bg4);}
+
+/* ── PERMISO ── */
+.perm-mark{
+width:72px;height:72px;
+background:linear-gradient(135deg,var(–gold-dim),var(–bg3));
+border:1px solid rgba(201,168,76,.3);
+border-radius:20px;
+display:flex;align-items:center;justify-content:center;
+font-size:2rem;
+box-shadow:0 0 40px rgba(201,168,76,.1);
+}
+.perm-name{
+font-family:‘Cormorant Garamond’,serif;
+font-size:2.2rem;font-weight:700;color:var(–text);
+line-height:1;
+}
+.perm-name em{color:var(–gold);font-style:italic;}
+.perm-tag{font-size:.72rem;color:var(–text3);letter-spacing:2px;text-transform:uppercase;}
+.perm-desc{font-size:.87rem;color:var(–text2);max-width:270px;line-height:1.65;}
+
+.perm-feats{display:flex;flex-direction:column;gap:8px;width:100%;max-width:320px;}
+.perm-feat{
+display:flex;align-items:center;gap:13px;
+background:var(–bg2);border:1px solid var(–border2);
+border-radius:14px;padding:12px 14px;text-align:left;
+}
+.pfic{
+width:38px;height:38px;flex-shrink:0;
+background:var(–bg3);border-radius:10px;
+display:flex;align-items:center;justify-content:center;font-size:1.1rem;
+}
+.pftext b{display:block;font-size:.81rem;color:var(–text);font-weight:600;margin-bottom:2px;}
+.pftext span{font-size:.71rem;color:var(–text3);}
+
+.perm-err{
+font-size:.78rem;color:#e07070;
+background:rgba(192,57,43,.12);border:1px solid rgba(192,57,43,.25);
+border-radius:10px;padding:10px 13px;max-width:310px;
+display:none;line-height:1.6;white-space:pre-line;text-align:left;
+}
+#btnUbicacion{
+width:100%;max-width:320px;padding:16px;
+background:var(–gold);color:#000;
+border:none;border-radius:50px;
+font-family:‘DM Sans’,sans-serif;font-size:.95rem;font-weight:700;
+cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+box-shadow:0 4px 24px rgba(201,168,76,.3);
+display:flex;align-items:center;justify-content:center;gap:8px;
+transition:all .15s;
+}
+#btnUbicacion:active{transform:scale(.97);background:var(–gold2);}
+.perm-note{font-size:.67rem;color:var(–text3);max-width:250px;}
+
+/* ── LOADING ── */
+.load-name{
+font-family:‘Cormorant Garamond’,serif;
+font-size:1.6rem;font-weight:700;color:var(–text);
+}
+.load-name em{color:var(–gold);font-style:italic;}
+.spinner{
+width:40px;height:40px;
+border:2px solid var(–border2);
+border-top-color:var(–gold);
+border-radius:50%;animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.ltxt{font-size:.82rem;color:var(–text3);}
+.lsub{font-size:.71rem;color:var(–border2);margin-top:-8px;}
+
+/* ── TOAST ── */
+.toast{
+position:fixed;bottom:20px;left:50%;
+transform:translateX(-50%) translateY(10px);
+background:var(–bg3);border:1px solid var(–border2);
+border-radius:50px;padding:8px 16px;
+font-size:.77rem;font-weight:500;color:var(–text2);
+opacity:0;pointer-events:none;transition:all .25s;z-index:500;
+white-space:nowrap;max-width:90vw;
+box-shadow:0 4px 20px rgba(0,0,0,.4);
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.ok{border-color:rgba(74,156,109,.4);color:var(–green);}
+.toast.gold{border-color:rgba(201,168,76,.4);color:var(–gold);}
+
+/* ── EMPTY ── */
+.empty{display:flex;flex-direction:column;align-items:center;padding:32px 20px;text-align:center;gap:8px;}
+.empty-ic{font-size:2rem;margin-bottom:6px;opacity:.5;}
+.empty-t{font-family:‘Cormorant Garamond’,serif;font-size:1.1rem;color:var(–text2);}
+.empty-s{font-size:.77rem;color:var(–text3);line-height:1.6;max-width:220px;}
+.empty-btn{margin-top:8px;padding:9px 20px;background:var(–gold-dim);color:var(–gold);border:1px solid rgba(201,168,76,.3);border-radius:50px;font-size:.78rem;font-weight:600;cursor:pointer;touch-action:manipulation;}
+
+/* ── LEAFLET ── */
+.leaflet-tile{filter:brightness(.55) saturate(.4) hue-rotate(10deg);}
+.leaflet-control-zoom{border:none !important;box-shadow:0 2px 12px rgba(0,0,0,.4) !important;}
+.leaflet-control-zoom a{background:var(–bg3) !important;color:var(–text2) !important;border:1px solid var(–border2) !important;}
+.leaflet-popup-content-wrapper{background:var(–bg2) !important;color:var(–text) !important;border:1px solid var(–border2) !important;border-radius:12px !important;font-family:‘DM Sans’,sans-serif !important;}
+.leaflet-popup-tip{background:var(–bg2) !important;}
+
+/* Animaciones por delay para stagger */
+.card:nth-child(1){animation-delay:.03s;}
+.card:nth-child(2){animation-delay:.06s;}
+.card:nth-child(3){animation-delay:.09s;}
+.card:nth-child(4){animation-delay:.12s;}
+.card:nth-child(5){animation-delay:.15s;}
+.card:nth-child(n+6){animation-delay:.18s;}
+
+@media(min-width:720px){
+.map-strip{height:100%;width:40%;position:fixed;top:0;right:0;bottom:0;border-left:1px solid var(–border);border-bottom:none;}
+.map-expand-btn{display:none;}
+#sApp{padding-right:40%;}
+.toast{bottom:20px;}
+}
+</style>
+
+</head>
+<body>
+
+<!-- PERMISO -->
+
+<div id="sPerm" class="screen visible">
+  <div class="perm-mark">🌾</div>
+  <div class="perm-name">Limpio y <em>Rico</em></div>
+  <div class="perm-tag">Comer sin restricciones</div>
+  <div class="perm-desc">Restaurantes sin TACC, veganos, kosher y experiencias gastronómicas únicas, exactamente donde estás.</div>
+  <div class="perm-feats">
+    <div class="perm-feat"><div class="pfic">🌾</div><div class="pftext"><b>Sin TACC y Vegano</b><span>Detecta por nombre y certificación OSM</span></div></div>
+    <div class="perm-feat"><div class="pfic">✡️</div><div class="pftext"><b>Kosher</b><span>Restaurantes con certificación kosher</span></div></div>
+    <div class="perm-feat"><div class="pfic">✨</div><div class="pftext"><b>Experiencias únicas</b><span>A ciegas, lengua de señas, rooftop y más</span></div></div>
+  </div>
+  <div class="perm-err" id="errorPerm"></div>
+  <button id="btnUbicacion"><span>📍</span> Usar mi ubicacion</button>
+  <div class="perm-note">Solo usamos tu GPS para buscar lugares. No guardamos datos.</div>
+</div>
+
+<!-- LOADING -->
+
+<div id="sLoad" class="screen">
+  <div class="load-name">Limpio y <em>Rico</em></div>
+  <div class="spinner"></div>
+  <div class="ltxt" id="textoLoad">Obteniendo ubicacion...</div>
+  <div class="lsub" id="subLoad"></div>
+</div>
+
+<!-- APP -->
+
+<div id="sApp" class="screen" style="display:none;flex-direction:column;">
+
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-main">Limpio y <em>Rico</em></div>
+      <div class="logo-sub">Gastronomia consciente</div>
+    </div>
+    <div class="searchbox">
+      <span class="search-ic">🔍</span>
+      <input type="text" id="inputBuscar" placeholder="Buscar...">
+    </div>
+  </div>
+
+  <!-- Mini mapa -->
+
+  <div class="map-strip" id="mapStrip">
+    <div id="map"></div>
+    <button class="map-expand-btn" id="mapExpandBtn">↕ Mapa</button>
+  </div>
+
+  <!-- Filtros -->
+
+  <div class="filter-wrap">
+    <div class="filter-row">
+      <span class="filter-sec">Dieta</span>
+      <div class="chip on"  data-dieta="todos">Todos</div>
+      <div class="chip"     data-dieta="tacc">🌾 Sin TACC</div>
+      <div class="chip"     data-dieta="vegan">🌿 Vegano</div>
+      <div class="chip"     data-dieta="ambos">✦ TACC+Vegano</div>
+      <div class="chip"     data-dieta="kosher">✡️ Kosher</div>
+      <div class="chip"     data-dieta="cafe">☕ Cafeterias</div>
+      <div class="chip"     data-dieta="dietetica">💚 Dieteticas</div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-sec">Exp.</span>
+      <div class="chip on" data-exp="">Todas</div>
+      <div class="chip" data-exp="blind_dining">🙈 A ciegas</div>
+      <div class="chip" data-exp="sign_language">🤟 Lengua senas</div>
+      <div class="chip" data-exp="live_music">🎵 Musica vivo</div>
+      <div class="chip" data-exp="rooftop">🌆 Rooftop</div>
+      <div class="chip" data-exp="outdoor">🌳 Aire libre</div>
+      <div class="chip" data-exp="pet_friendly">🐾 Pet friendly</div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-sec">Cocina</span>
+      <div class="chip on" data-cuisine="">Todas</div>
+      <div class="chip" data-cuisine="colombian">🇨🇴 Colombiana</div>
+      <div class="chip" data-cuisine="peruvian">🇵🇪 Peruana</div>
+      <div class="chip" data-cuisine="bolivian">🇧🇴 Boliviana</div>
+      <div class="chip" data-cuisine="venezuelan">🇻🇪 Venezolana</div>
+      <div class="chip" data-cuisine="brazilian">🇧🇷 Brasilena</div>
+      <div class="chip" data-cuisine="mexican">🇲🇽 Mexicana</div>
+      <div class="chip" data-cuisine="chinese">🇨🇳 China</div>
+      <div class="chip" data-cuisine="japanese">🇯🇵 Japonesa</div>
+      <div class="chip" data-cuisine="italian">🇮🇹 Italiana</div>
+      <div class="chip" data-cuisine="arabic;middle_eastern;lebanese">🌍 Arabe</div>
+      <div class="chip" data-cuisine="burger;american">🍔 Hamburguesas</div>
+      <div class="chip" data-cuisine="pizza">🍕 Pizza</div>
+      <div class="chip" data-cuisine="sushi">🍣 Sushi</div>
+      <div class="chip" data-cuisine="parrilla;grill;bbq">🥩 Parrilla</div>
+    </div>
+  </div>
+
+  <div class="af-bar" id="afBar">
+    <span class="af-text" id="afText"></span>
+    <span class="af-clear" id="afClear">Limpiar</span>
+  </div>
+
+  <div class="radio-bar">
+    <div class="radio-info">Radio: <b id="radioLabel">1 km</b></div>
+    <div class="radio-btns">
+      <div class="rbtn" data-r="500">500m</div>
+      <div class="rbtn active" data-r="1000">1km</div>
+      <div class="rbtn" data-r="2000">2km</div>
+      <div class="rbtn" data-r="5000">5km</div>
+      <div class="rbtn" data-r="10000">10km</div>
+    </div>
+  </div>
+
+  <div class="list-area" id="listaCards">
+    <div class="empty"><div class="empty-ic">✦</div><div class="empty-t">Buscando lugares...</div></div>
+  </div>
+
+</div>
+
+<!-- DETALLE -->
+
+<div id="sDetalle" class="screen" style="display:flex;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);">
+  <div class="det-nav">
+    <button class="back-btn" id="btnVolver">←</button>
+    <div class="det-nav-title">Detalle del lugar</div>
+  </div>
+  <div class="det-body" id="detBody"></div>
+  <div class="det-foot">
+    <button class="btn-p" id="btnNav">🧭 Como llegar</button>
+    <button class="btn-s" id="btnOsm">OSM</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var mapa,uLat,uLng,circulo;
+var cache={},todos=[],visibles=[],marcadores={};
+var selId=null,mapExpanded=false;
+var filtroDieta='todos',filtroExp='',filtroCocina='';
+var radioActual=1000;
+
+var SERVERS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+
+var KW_TACC=['sin tacc','sin-tacc','sintacc','celiaco','celiaca','celíaco','celíaca','gluten free','gluten-free','glutenfree','libre de gluten','apto celiaco'];
+var KW_VEGAN=['vegano','vegana','vegan','vegetariano','vegetariana','plant based','plant-based'];
+var KW_KOSHER=['kosher','kasher'];
+var KW_DIET=['dietética','dietetica','naturista','natural','organico','orgánico','saludable','integral'];
+
+var COCINAS={'colombian':'Colombiana','colombia':'Colombiana','peruvian':'Peruana','peru':'Peruana','bolivian':'Boliviana','bolivia':'Boliviana','venezuelan':'Venezolana','venezuela':'Venezolana','brazilian':'Brasilena','brazil':'Brasilena','mexican':'Mexicana','mexico':'Mexicana','chinese':'China','japanese':'Japonesa','italian':'Italiana','arabic':'Arabe','middle_eastern':'Arabe','lebanese':'Arabe','burger':'Hamburguesas','american':'Hamburguesas','pizza':'Pizza','sushi':'Sushi','parrilla':'Parrilla','grill':'Parrilla','bbq':'Parrilla','sandwich':'Sandwicheria','cafe':'Cafeteria'};
+var COCINA_EMO={'Colombiana':'🇨🇴','Peruana':'🇵🇪','Boliviana':'🇧🇴','Venezolana':'🇻🇪','Brasilena':'🇧🇷','Mexicana':'🇲🇽','China':'🥢','Japonesa':'🍱','Italiana':'🍝','Arabe':'🧆','Hamburguesas':'🍔','Pizza':'🍕','Sushi':'🍣','Sandwicheria':'🥪','Parrilla':'🥩','Cafeteria':'☕'};
+var EXPS={'blind_dining':{label:'Comida a ciegas',emoji:'🙈',desc:'El local apaga las luces para que experimentes los sabores sin la vista.'},'sign_language':{label:'Lengua de senas',emoji:'🤟',desc:'Personal que se comunica en lengua de senas. Espacio inclusivo.'},'live_music':{label:'Musica en vivo',emoji:'🎵',desc:'Shows y bandas en vivo durante la cena.'},'rooftop':{label:'Rooftop',emoji:'🌆',desc:'Terraza en altura con vistas panoramicas.'},'outdoor':{label:'Al aire libre',emoji:'🌳',desc:'Mesas y ambiente exterior.'},'tasting_menu':{label:'Menu degustacion',emoji:'🍽️',desc:'Experiencia de multiples platos.'},'themed':{label:'Tematico',emoji:'🎭',desc:'Ambientacion tematica especial.'},'pet_friendly':{label:'Pet friendly',emoji:'🐾',desc:'Bienvenidas las mascotas.'}};
+
+function fmtR(r){return r<1000?r+'m':(r/1000).toFixed(r%1000===0?0:1)+'km';}
+function contiene(txt,kws){var t=txt.toLowerCase();for(var i=0;i<kws.length;i++)if(t.indexOf(kws[i])>=0)return true;return false;}
+
+function mostrar(id){
+  ['sPerm','sLoad'].forEach(function(s){document.getElementById(s).style.display='none';});
+  if(id==='sPerm')document.getElementById('sPerm').style.display='flex';
+  if(id==='sLoad')document.getElementById('sLoad').style.display='flex';
+  if(id==='sApp') document.getElementById('sApp').style.display='flex';
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+  document.getElementById('btnUbicacion').addEventListener('click',pedirUbicacion);
+  document.getElementById('inputBuscar').addEventListener('input',aplicarFiltros);
+
+  document.querySelectorAll('[data-dieta]').forEach(function(c){c.addEventListener('click',function(){filtroDieta=this.getAttribute('data-dieta');document.querySelectorAll('[data-dieta]').forEach(function(x){x.className='chip';});this.classList.add('on');aplicarFiltros();});});
+  document.querySelectorAll('[data-exp]').forEach(function(c){c.addEventListener('click',function(){var v=this.getAttribute('data-exp');filtroExp=(filtroExp===v)?'':v;document.querySelectorAll('[data-exp]').forEach(function(x){x.className='chip';});if(!filtroExp)document.querySelector('[data-exp=""]').classList.add('on');else this.classList.add('on-purple');aplicarFiltros();});});
+  document.querySelector('[data-exp=""]').classList.add('on');
+  document.querySelectorAll('[data-cuisine]').forEach(function(c){c.addEventListener('click',function(){var v=this.getAttribute('data-cuisine');filtroCocina=(filtroCocina===v)?'':v;document.querySelectorAll('[data-cuisine]').forEach(function(x){x.className='chip';});if(!filtroCocina)document.querySelector('[data-cuisine=""]').classList.add('on');else this.classList.add('on-blue');aplicarFiltros();});});
+  document.querySelector('[data-cuisine=""]').classList.add('on');
+  document.querySelectorAll('[data-r]').forEach(function(b){b.addEventListener('click',function(){cambiarRadio(parseInt(this.getAttribute('data-r')));});});
+  document.getElementById('afClear').addEventListener('click',limpiarFiltros);
+  document.getElementById('btnVolver').addEventListener('click',cerrarDetalle);
+  document.getElementById('mapExpandBtn').addEventListener('click',toggleMapa);
+});
+
+function toggleMapa(){
+  mapExpanded=!mapExpanded;
+  var ms=document.getElementById('mapStrip');
+  ms.classList.toggle('expanded',mapExpanded);
+  document.getElementById('mapExpandBtn').textContent=mapExpanded?'↕ Cerrar':'↕ Mapa';
+  setTimeout(function(){if(mapa)mapa.invalidateSize();},350);
+}
+
+function cambiarRadio(r){
+  radioActual=r;
+  document.querySelectorAll('[data-r]').forEach(function(b){b.classList.remove('active');});
+  var btn=document.querySelector('[data-r="'+r+'"]');if(btn)btn.classList.add('active');
+  document.getElementById('radioLabel').textContent=fmtR(r);
+  if(circulo)circulo.setRadius(r);
+  if(cache[r]){todos=cache[r];aplicarFiltros();toast('📍 '+todos.length+' lugares en '+fmtR(r),'gold');}
+  else{document.getElementById('listaCards').innerHTML='<div class="empty"><div class="empty-ic">🔍</div><div class="empty-t">Buscando en '+fmtR(r)+'...</div></div>';buscar(0,r);}
+}
+
+function limpiarFiltros(){
+  filtroDieta='todos';filtroExp='';filtroCocina='';
+  document.querySelectorAll('[data-dieta]').forEach(function(c){c.className='chip';});document.querySelector('[data-dieta="todos"]').classList.add('on');
+  document.querySelectorAll('[data-exp]').forEach(function(c){c.className='chip';});document.querySelector('[data-exp=""]').classList.add('on');
+  document.querySelectorAll('[data-cuisine]').forEach(function(c){c.className='chip';});document.querySelector('[data-cuisine=""]').classList.add('on');
+  document.getElementById('inputBuscar').value='';
+  aplicarFiltros();
+}
+
+function pedirUbicacion(){
+  if(!navigator.geolocation){mostrarError('Tu navegador no soporta GPS.');return;}
+  mostrar('sLoad');setL('Obteniendo tu ubicacion...');
+  navigator.geolocation.getCurrentPosition(
+    function(pos){uLat=pos.coords.latitude;uLng=pos.coords.longitude;setL('Iniciando...');mostrar('sApp');iniciarMapa();setL('Buscando lugares...');buscar(0,1000);},
+    function(err){var m='No se pudo obtener la ubicacion.';if(err.code===1)m='Permiso denegado.\n\nVe a Ajustes iPhone > Privacidad > Ubicacion > Chrome > "Al usar la app".\nLuego recarga.';if(err.code===2)m='GPS no disponible.';if(err.code===3)m='Tiempo agotado. Intenta de nuevo.';mostrarError(m);},
+    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
+  );
+}
+function mostrarError(m){var e=document.getElementById('errorPerm');e.textContent=m;e.style.display='block';mostrar('sPerm');document.getElementById('btnUbicacion').innerHTML='<span>🔄</span> Reintentar';}
+function setL(t){document.getElementById('textoLoad').textContent=t;}
+function setS(t){document.getElementById('subLoad').textContent=t;}
+
+function iniciarMapa(){
+  mapa=L.map('map',{zoomControl:false,attributionControl:false}).setView([uLat,uLng],15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(mapa);
+  L.control.zoom({position:'bottomright'}).addTo(mapa);
+  circulo=L.circle([uLat,uLng],{radius:radioActual,color:'#c9a84c',weight:1.5,fillColor:'#c9a84c',fillOpacity:.04,dashArray:'5,8'}).addTo(mapa);
+  var iYo=L.divIcon({className:'',html:'<div style="width:20px;height:20px;background:#c9a84c;border:2px solid #0a0a0a;border-radius:50%;box-shadow:0 0 0 5px rgba(201,168,76,.2)"></div>',iconSize:[20,20],iconAnchor:[10,10]});
+  L.marker([uLat,uLng],{icon:iYo,zIndexOffset:9999}).addTo(mapa).bindPopup('<b style="color:#c9a84c">Tu ubicacion</b>');
+  mapa.on('click',function(){selId=null;renderMarcadores();});
+  setTimeout(function(){mapa.invalidateSize();},300);
+}
+
+function buildQuery(radio){
+  var lat=uLat,lng=uLng,r=radio;
+  return '[out:json][timeout:45];('
+    +'node["diet:gluten_free"](around:'+r+','+lat+','+lng+');'
+    +'node["diet:vegan"](around:'+r+','+lat+','+lng+');'
+    +'node["diet:kosher"](around:'+r+','+lat+','+lng+');'
+    +'node["diet:vegetarian"](around:'+r+','+lat+','+lng+');'
+    +'node["amenity"="restaurant"](around:'+r+','+lat+','+lng+');'
+    +'node["amenity"="cafe"](around:'+r+','+lat+','+lng+');'
+    +'node["amenity"="fast_food"](around:'+r+','+lat+','+lng+');'
+    +'node["amenity"="bar"](around:'+r+','+lat+','+lng+');'
+    +'node["amenity"="ice_cream"](around:'+r+','+lat+','+lng+');'
+    +'node["shop"="bakery"](around:'+r+','+lat+','+lng+');'
+    +'node["shop"="health_food"](around:'+r+','+lat+','+lng+');'
+    +'node["shop"="organic"](around:'+r+','+lat+','+lng+');'
+    +'node["shop"="dietetic"](around:'+r+','+lat+','+lng+');'
+    +'node["shop"="pastry"](around:'+r+','+lat+','+lng+');'
+    +'way["amenity"="restaurant"](around:'+r+','+lat+','+lng+');'
+    +'way["amenity"="cafe"](around:'+r+','+lat+','+lng+');'
+    +'way["amenity"="fast_food"](around:'+r+','+lat+','+lng+');'
+    +'way["shop"="bakery"](around:'+r+','+lat+','+lng+');'
+    +'way["shop"="health_food"](around:'+r+','+lat+','+lng+');'
+    +'way["diet:gluten_free"](around:'+r+','+lat+','+lng+');'
+    +'way["diet:vegan"](around:'+r+','+lat+','+lng+');'
+    +');out center tags;';
+}
+
+function buscar(srvIdx,radio){
+  if(srvIdx>=SERVERS.length){document.getElementById('listaCards').innerHTML='<div class="empty"><div class="empty-ic">📡</div><div class="empty-t">Sin conexion</div><div class="empty-s">Verifica tu internet y recarga.</div><div class="empty-btn" onclick="location.reload()">Reintentar</div></div>';return;}
+  setS('Servidor '+(srvIdx+1)+'...');
+  var ctrl=new AbortController(),tid=setTimeout(function(){ctrl.abort();},20000);
+  fetch(SERVERS[srvIdx],{method:'POST',body:'data='+encodeURIComponent(buildQuery(radio)),signal:ctrl.signal})
+  .then(function(r){clearTimeout(tid);if(!r.ok)throw 0;return r.json();})
+  .then(function(d){clearTimeout(tid);if(!d.elements)throw 0;procesarLugares(d.elements,radio);})
+  .catch(function(){clearTimeout(tid);setTimeout(function(){buscar(srvIdx+1,radio);},600);});
+}
+
+function detectarCocina(c){if(!c)return null;var pp=c.toLowerCase().split(/[;,]/);for(var i=0;i<pp.length;i++){var p=pp[i].trim();if(COCINAS[p])return COCINAS[p];}return null;}
+function matchCuisine(raw,f){if(!f)return true;if(!raw)return false;var h=raw.toLowerCase(),kk=f.split(';');for(var i=0;i<kk.length;i++)if(h.indexOf(kk[i].trim())>=0)return true;return false;}
+function detectarExps(t){
+  var ex=[];
+  if(t['outdoor_seating']==='yes')ex.push('outdoor');
+  if(t['live_music']==='yes')ex.push('live_music');
+  if(t['rooftop']==='yes')ex.push('rooftop');
+  if(t['pet_friendly']==='yes'||t['dog_friendly']==='yes')ex.push('pet_friendly');
+  var txt=(t.name+' '+(t.description||'')+' '+(t.note||'')).toLowerCase();
+  if(txt.indexOf('cieg')>=0||txt.indexOf('blind')>=0)ex.push('blind_dining');
+  if(txt.indexOf('sena')>=0||txt.indexOf('sordo')>=0)ex.push('sign_language');
+  if(txt.indexOf('degust')>=0||txt.indexOf('tasting')>=0)ex.push('tasting_menu');
+  if(txt.indexOf('temati')>=0)ex.push('themed');
+  if(txt.indexOf('rooftop')>=0&&ex.indexOf('rooftop')<0)ex.push('rooftop');
+  if((txt.indexOf('musica en vivo')>=0||txt.indexOf('live music')>=0)&&ex.indexOf('live_music')<0)ex.push('live_music');
+  if((txt.indexOf('pet')>=0||txt.indexOf('mascotas')>=0)&&ex.indexOf('pet_friendly')<0)ex.push('pet_friendly');
+  if((txt.indexOf('aire libre')>=0||txt.indexOf('jardin')>=0||txt.indexOf('patio')>=0)&&ex.indexOf('outdoor')<0)ex.push('outdoor');
+  return ex;
+}
+
+function procesarLugares(els,radio){
+  var v={},result=[];
+  for(var i=0;i<els.length;i++){
+    var e=els[i];
+    if(!e.tags||!e.tags.name||v[e.id])continue;
+    v[e.id]=true;
+    var t=e.tags;
+    var lat=e.lat||(e.center&&e.center.lat);
+    var lng=e.lon||(e.center&&e.center.lon);
+    if(!lat||!lng)continue;
+    var dist=calcDist(uLat,uLng,lat,lng);
+    if(dist>radio)continue;
+    var nombre=t.name||'';
+    var textoTotal=(nombre+' '+(t.description||'')+' '+(t.note||'')+' '+(t.cuisine||'')).toLowerCase();
+    var gfTag=t['diet:gluten_free']==='yes'||t['diet:gluten_free']==='only';
+    var veTag=t['diet:vegan']==='yes'||t['diet:vegan']==='only';
+    var vgTag=t['diet:vegetarian']==='yes'||t['diet:vegetarian']==='only';
+    var koTag=t['diet:kosher']==='yes'||t['diet:kosher']==='only';
+    var gfNom=contiene(textoTotal,KW_TACC);
+    var veNom=contiene(textoTotal,KW_VEGAN);
+    var koNom=contiene(textoTotal,KW_KOSHER);
+    var gf=gfTag||gfNom,ve=veTag||veNom,vg=vgTag,ko=koTag||koNom;
+    var am=t.amenity||t.shop||'';
+    var esDiet=am==='health_food'||am==='organic'||am==='dietetic'||contiene(textoTotal,KW_DIET);
+    if(esDiet&&!gf)gf=true;
+    var cat='none';
+    if(gf&&ve)cat='ambos';else if(gf)cat='celiac';else if(ve)cat='vegan';else if(vg)cat='vegetarian';
+    var tipo='Restaurante';
+    if(am==='cafe'||am==='bar'||am==='juice_bar')tipo='Cafeteria';
+    else if(am==='bakery'||am==='pastry')tipo='Panaderia';
+    else if(am==='fast_food')tipo='Fast Food';
+    else if(am==='ice_cream')tipo='Heladeria';
+    else if(esDiet||am==='health_food'||am==='organic'||am==='dietetic')tipo='Dietetica Natural';
+    else if(am==='supermarket'||am==='deli')tipo='Almacen';
+    var cuisineRaw=t.cuisine||'';
+    var cuisineLabel=detectarCocina(cuisineRaw);
+    var experiencias=detectarExps(t);
+    var fuenteNombre=(gfNom||veNom||koNom)&&!(gfTag||veTag||koTag);
+    var info=[];
+    if(gfTag&&t['diet:gluten_free']==='only')info.push({ic:'🌾',lab:'TACC',val:'100% Sin TACC (certificado en OSM)'});
+    else if(gfTag)info.push({ic:'🌾',lab:'TACC',val:'Opciones sin TACC (dato de OSM)'});
+    else if(gfNom)info.push({ic:'🌾',lab:'TACC',val:'Detectado "Sin TACC" en el nombre del local'});
+    if(veTag&&t['diet:vegan']==='only')info.push({ic:'🌿',lab:'Dieta',val:'100% Vegano (OSM)'});
+    else if(veTag)info.push({ic:'🌿',lab:'Dieta',val:'Opciones veganas (OSM)'});
+    else if(veNom)info.push({ic:'🌿',lab:'Dieta',val:'Detectado "Vegano" en el nombre'});
+    if(vg)info.push({ic:'🥗',lab:'Dieta',val:'Opciones vegetarianas'});
+    if(koTag)info.push({ic:'✡️',lab:'Kosher',val:t['diet:kosher']==='only'?'100% Kosher':'Opciones Kosher (OSM)'});
+    else if(koNom)info.push({ic:'✡️',lab:'Kosher',val:'Detectado "Kosher" en el nombre'});
+    if(esDiet)info.push({ic:'💚',lab:'Tipo',val:'Dietetica / tienda naturista'});
+    if(cuisineRaw)info.push({ic:'🍴',lab:'Cocina',val:cuisineRaw.replace(/_/g,' ')});
+    if(t.opening_hours)info.push({ic:'🕐',lab:'Horario',val:t.opening_hours});
+    var dir='';
+    if(t['addr:street'])dir+=t['addr:street'];
+    if(t['addr:housenumber'])dir+=' '+t['addr:housenumber'];
+    if(t['addr:city'])dir+=', '+t['addr:city'];
+    if(t['addr:postcode'])dir+=' ('+t['addr:postcode']+')';
+    if(dir)info.push({ic:'📌',lab:'Direccion',val:dir});
+    if(t.phone||t['contact:phone'])info.push({ic:'📞',lab:'Telefono',val:t.phone||t['contact:phone']});
+    if(t['contact:whatsapp'])info.push({ic:'💬',lab:'WhatsApp',val:t['contact:whatsapp']});
+    if(t.website||t['contact:website'])info.push({ic:'🌐',lab:'Web',val:(t.website||t['contact:website']).replace(/^https?:\/\//,'').slice(0,45)});
+    var redes='';
+    if(t['contact:instagram'])redes+='IG: @'+t['contact:instagram'].replace(/^@/,'');
+    if(t['contact:facebook'])redes+=(redes?' · ':'')+'FB: '+t['contact:facebook'].replace(/^https?:\/\/(www\.)?facebook\.com\//,'');
+    if(redes)info.push({ic:'📷',lab:'Redes',val:redes});
+    if(t.email||t['contact:email'])info.push({ic:'✉️',lab:'Email',val:t.email||t['contact:email']});
+    if(t.description)info.push({ic:'📝',lab:'Descripcion',val:t.description});
+    if(!info.length)info.push({ic:'ℹ️',lab:'Info',val:'Sin informacion adicional en OpenStreetMap.'});
+    result.push({id:e.id,nombre:nombre,tipo:tipo,cat:cat,lat:lat,lng:lng,dist:dist,info:info,osmId:e.id,osmTipo:e.type||'node',esDiet:esDiet,esKosher:ko,cuisineRaw:cuisineRaw,cuisineLabel:cuisineLabel,experiencias:experiencias,fuenteNombre:fuenteNombre});
+  }
+  result.sort(function(a,b){return a.dist-b.dist;});
+  cache[radio]=result;todos=result;radioActual=radio;
+  if(result.length<8&&radio<10000){
+    var sig={500:1000,1000:2000,2000:5000,5000:10000}[radio];
+    if(sig){setTimeout(function(){toast('Expandiendo a '+fmtR(sig)+'...','gold');setTimeout(function(){cambiarRadio(sig);},1500);},1000);}
+  }
+  aplicarFiltros();
+  var cD=result.filter(function(p){return p.cat!=='none'||p.esKosher;}).length;
+  toast('✅ '+result.length+' lugares · '+cD+' dieteticos','ok');
+}
+
+function calcDist(a,b,c,d){var R=6371000,dA=(c-a)*Math.PI/180,dB=(d-b)*Math.PI/180;var x=Math.sin(dA/2)*Math.sin(dA/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dB/2)*Math.sin(dB/2);return Math.round(R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)));}
+function fmt(m){return m<1000?m+'m':(m/1000).toFixed(1)+' km';}
+function dcls(m){return m<=300?'d0':m<=800?'d1':'';}
+
+function aplicarFiltros(){
+  var q=document.getElementById('inputBuscar').value.toLowerCase();
+  visibles=todos.filter(function(p){
+    var md=filtroDieta==='todos'?true:filtroDieta==='tacc'?(p.cat==='celiac'||p.cat==='ambos'):filtroDieta==='vegan'?(p.cat==='vegan'||p.cat==='ambos'):filtroDieta==='ambos'?p.cat==='ambos':filtroDieta==='kosher'?p.esKosher:filtroDieta==='cafe'?p.tipo==='Cafeteria':filtroDieta==='dietetica'?p.esDiet:true;
+    var me=filtroExp?p.experiencias.indexOf(filtroExp)>=0:true;
+    var mc=matchCuisine(p.cuisineRaw,filtroCocina);
+    var mb=q?p.nombre.toLowerCase().indexOf(q)>=0:true;
+    return md&&me&&mc&&mb;
+  });
+  document.getElementById('listaCards').innerHTML=''; // limpiar para re-animar
+  // pequeño delay para que la animacion se vea
+  setTimeout(function(){
+    renderLista();
+    if(mapa)renderMarcadores();
+  },50);
+  actualizarBanner();
+  // contador en radio-bar
+  document.getElementById('radioLabel').textContent=fmtR(radioActual)+'  ('+visibles.length+')';
+}
+
+function actualizarBanner(){
+  var b=document.getElementById('afBar'),pp=[];
+  if(filtroDieta!=='todos'){var nd={'tacc':'Sin TACC','vegan':'Vegano','ambos':'TACC+Vegano','kosher':'Kosher','cafe':'Cafeterias','dietetica':'Dieteticas'};pp.push(nd[filtroDieta]||filtroDieta);}
+  if(filtroExp&&EXPS[filtroExp])pp.push(EXPS[filtroExp].emoji+' '+EXPS[filtroExp].label);
+  if(filtroCocina){var ch=document.querySelector('[data-cuisine="'+filtroCocina+'"]');if(ch)pp.push(ch.textContent.trim());}
+  if(document.getElementById('inputBuscar').value)pp.push('"'+document.getElementById('inputBuscar').value+'"');
+  if(pp.length){b.classList.add('show');document.getElementById('afText').textContent='Filtros activos: '+pp.join(' · ');}
+  else b.classList.remove('show');
+}
+
+function emo(t){return t==='Cafeteria'?'☕':t==='Panaderia'?'🥖':t==='Fast Food'?'🍔':t==='Heladeria'?'🍦':t==='Almacen'?'🛒':t==='Dietetica Natural'?'🌿':'🍽️';}
+function col(c,k,ex){if(k)return'#4a7fb5';if(ex&&ex.length)return'#9b6fd4';return c==='celiac'?'#c9a84c':c==='vegan'?'#4a9c6d':c==='ambos'?'#a08030':c==='vegetarian'?'#5a8a60':'#444';}
+function catCls(p){if(p.esKosher&&p.cat==='none')return' c-kosher';if(p.experiencias&&p.experiencias.length&&p.cat==='none'&&!p.esKosher)return' c-exp';return p.cat==='celiac'?' c-tacc':p.cat==='vegan'?' c-vegan':p.cat==='ambos'?' c-ambos':p.esDiet?' c-diet':'';}
+
+function renderLista(){
+  var el=document.getElementById('listaCards');
+  if(!visibles.length){
+    var msg=todos.length===0?'No hay lugares en '+fmtR(radioActual)+'. Probá expandir el radio.':'Sin resultados para estos filtros.';
+    el.innerHTML='<div class="empty"><div class="empty-ic">✦</div><div class="empty-t">Sin resultados</div><div class="empty-s">'+msg+'</div></div>';
+    return;
+  }
+  var frag=document.createDocumentFragment();
+  var max=Math.min(visibles.length,100);
+  for(var i=0;i<max;i++){
+    (function(p,idx){
+      var div=document.createElement('div');
+      div.className='card'+catCls(p)+(selId===p.id?' sel':'');
+      div.id='card'+p.id;
+      div.style.animationDelay=Math.min(idx*.04,.25)+'s';
+      var th='';
+      if(p.cat==='celiac'||p.cat==='ambos')th+='<span class="tag tag-tacc">🌾 Sin TACC</span>';
+      if(p.cat==='vegan'||p.cat==='ambos')th+='<span class="tag tag-vegan">🌿 Vegano</span>';
+      if(p.cat==='vegetarian')th+='<span class="tag tag-veg">🥗 Vegetariano</span>';
+      if(p.esDiet)th+='<span class="tag tag-diet">💚 Dietetica</span>';
+      if(p.esKosher)th+='<span class="tag tag-kosher">✡️ Kosher</span>';
+      if(p.cuisineLabel)th+='<span class="tag tag-cuisine">'+(COCINA_EMO[p.cuisineLabel]||'🍴')+' '+p.cuisineLabel+'</span>';
+      if(p.fuenteNombre&&p.cat!=='none')th+='<span class="tag tag-kw">por nombre</span>';
+      if(p.experiencias&&p.experiencias.length){p.experiencias.slice(0,2).forEach(function(k){if(EXPS[k])th+='<span class="tag tag-exp">'+EXPS[k].emoji+' '+EXPS[k].label+'</span>';});}
+      if(p.cat==='none'&&!p.esDiet&&!p.esKosher&&!p.cuisineLabel&&!p.experiencias.length)th+='<span class="tag tag-nd">Sin datos</span>';
+
+      div.innerHTML=
+        '<div class="card-bar"></div>'
+        +'<div class="card-body">'
+          +'<div class="card-top">'
+            +'<div class="card-name">'+p.nombre+'</div>'
+            +'<div class="card-dist '+dcls(p.dist)+'">'+fmt(p.dist)+'</div>'
+          +'</div>'
+          +'<div class="card-meta">'
+            +'<span class="card-tipo">'+emo(p.tipo)+' '+p.tipo+'</span>'
+          +'</div>'
+          +'<div class="card-tags">'+th+'</div>'
+        +'</div>';
+
+      var y0=0,x0=0;
+      div.addEventListener('touchstart',function(e){y0=e.touches[0].clientY;x0=e.touches[0].clientX;},{passive:true});
+      div.addEventListener('touchend',function(e){if(Math.abs(e.changedTouches[0].clientY-y0)<8&&Math.abs(e.changedTouches[0].clientX-x0)<8){e.preventDefault();abrirDetalle(p);}});
+      div.addEventListener('click',function(){abrirDetalle(p);});
+      frag.appendChild(div);
+    })(visibles[i],i);
+  }
+  el.appendChild(frag);
+}
+
+function renderMarcadores(){
+  Object.values(marcadores).forEach(function(m){mapa.removeLayer(m);});
+  marcadores={};
+  var vs={};visibles.forEach(function(p){vs[p.id]=true;});
+  todos.forEach(function(p){
+    var esV=!!vs[p.id],esSel=selId===p.id,c=col(p.cat,p.esKosher,p.experiencias),sz=esSel?44:30;
+    var icon=L.divIcon({className:'',html:'<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+(esSel?c:'#0a0a0a')+';border:2px solid '+c+';display:flex;align-items:center;justify-content:center;font-size:'+(esSel?15:11)+'px;opacity:'+(esV?1:0.15)+';box-shadow:'+(esSel?'0 0 0 4px '+c+'33,':'')+'0 2px 8px rgba(0,0,0,.6);cursor:pointer;">'+emo(p.tipo)+'</div>',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]});
+    var mk=L.marker([p.lat,p.lng],{icon:icon,zIndexOffset:esSel?500:0}).addTo(mapa);
+    if(esV)mk.on('click',function(e){e.originalEvent.stopPropagation();abrirDetalle(p);});
+    marcadores[p.id]=mk;
+  });
+}
+
+function abrirDetalle(p){
+  selId=p.id;
+  document.querySelectorAll('.card').forEach(function(c){c.classList.remove('sel');});
+  var card=document.getElementById('card'+p.id);
+  if(card){card.classList.add('sel');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
+  if(mapa)mapa.flyTo([p.lat,p.lng],18,{animate:true,duration:.5});
+  renderMarcadores();
+  var th='';
+  if(p.cat==='celiac'||p.cat==='ambos')th+='<span class="tag tag-tacc" style="font-size:.75rem;padding:4px 11px;">🌾 Sin TACC</span>';
+  if(p.cat==='vegan'||p.cat==='ambos')th+='<span class="tag tag-vegan" style="font-size:.75rem;padding:4px 11px;">🌿 Vegano</span>';
+  if(p.cat==='vegetarian')th+='<span class="tag tag-veg" style="font-size:.75rem;padding:4px 11px;">🥗 Vegetariano</span>';
+  if(p.esDiet)th+='<span class="tag tag-diet" style="font-size:.75rem;padding:4px 11px;">💚 Dietetica</span>';
+  if(p.esKosher)th+='<span class="tag tag-kosher" style="font-size:.75rem;padding:4px 11px;">✡️ Kosher</span>';
+  if(p.cuisineLabel)th+='<span class="tag tag-cuisine" style="font-size:.75rem;padding:4px 11px;">'+(COCINA_EMO[p.cuisineLabel]||'🍴')+' '+p.cuisineLabel+'</span>';
+  var ih='';
+  p.info.forEach(function(r){ih+='<div class="info-row"><div class="info-ic">'+r.ic+'</div><div><div class="info-label">'+r.lab+'</div><div class="info-value">'+r.val+'</div></div></div>';});
+  var expBlock='';
+  if(p.experiencias&&p.experiencias.length){var ei='';p.experiencias.forEach(function(k){if(EXPS[k]){var ex=EXPS[k];ei+='<div class="exp-item"><div class="exp-ic">'+ex.emoji+'</div><div><div style="font-weight:600;font-size:.83rem;color:var(--text);margin-bottom:2px;">'+ex.label+'</div><div style="font-size:.75rem;color:var(--text3);line-height:1.4;">'+ex.desc+'</div></div></div>';}});if(ei)expBlock='<div class="exp-block"><div class="exp-block-title">✨ Experiencia especial</div>'+ei+'</div>';}
+  document.getElementById('detBody').innerHTML=
+    '<div class="det-hero">'
+      +'<div class="det-tipo-row"><div class="det-tipo-ic">'+emo(p.tipo)+'</div><div style="flex:1"><div class="det-tipo-label">'+p.tipo+'</div></div><div class="det-dist-badge">'+fmt(p.dist)+'</div></div>'
+      +'<div class="det-name">'+p.nombre+'</div>'
+      +'<div class="det-tags">'+th+'</div>'
+    +'</div>'
+    +expBlock
+    +'<div class="det-section"><div class="det-sec-title">Informacion del lugar</div>'+ih+'</div>'
+    +'<div class="det-section"><div class="osm-note">Datos de OpenStreetMap. Los locales marcados "por nombre" pueden no tener opciones sin TACC — verificar antes de ir. Podés agregar tu local favorito en osm.org.</div></div>';
+  document.getElementById('btnNav').onclick=function(){window.open('https://www.google.com/maps/dir/?api=1&destination='+p.lat+','+p.lng,'_blank');};
+  document.getElementById('btnOsm').onclick=function(){window.open('https://www.openstreetmap.org/'+p.osmTipo+'/'+p.osmId,'_blank');};
+  document.getElementById('sDetalle').style.transform='translateX(0)';
+}
+function cerrarDetalle(){document.getElementById('sDetalle').style.transform='translateX(100%)';selId=null;renderMarcadores();}
+function toast(msg,tipo){var t=document.getElementById('toast');t.textContent=msg;t.className='toast on'+(tipo?' '+tipo:'');setTimeout(function(){t.className='toast'+(tipo?' '+tipo:'');},4000);}
+</script>
+
+</body>
+</html>
